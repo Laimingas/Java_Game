@@ -1,0 +1,586 @@
+package com.Laimis.Java_Game;
+
+import com.badlogic.gdx.Gdx;
+import com.badlogic.gdx.Screen;
+import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Texture;
+import com.Laimis.Java_Game.LevelSelectScreen;
+import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.OrthographicCamera;
+import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
+import com.badlogic.gdx.maps.tiled.TiledMap;
+import com.badlogic.gdx.maps.tiled.TmxMapLoader;
+import com.badlogic.gdx.maps.tiled.renderers.OrthogonalTiledMapRenderer;
+import com.badlogic.gdx.math.Vector2;
+import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.graphics.g2d.*;
+import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.utils.viewport.Viewport;
+import com.badlogic.gdx.math.MathUtils;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+
+public class GameScreen implements Screen {
+    Main game;
+    int levelNumber;
+    Texture background;
+
+    OrthographicCamera camera;
+    Viewport viewport;
+    SpriteBatch batch;
+    BitmapFont font;
+
+    // HUD Textures
+    Texture hudCoinTexture;
+    Texture[] numberTextures;
+    SpriteBatch hudBatch;
+
+    // Map variables
+    int[][] map;
+    Texture tileset;
+    TextureRegion[][] tileRegions;  // Declare at the class level
+    int numRows;  // Declare at the class level
+    int numCols;  // Declare at the class level
+
+    private float[] backgroundPositions;
+
+    // Player variables
+    Animation<TextureRegion> walkRightAnimation;
+    Animation<TextureRegion> walkLeftAnimation;
+    Animation<TextureRegion> idleAnimation;
+    Animation<TextureRegion> jumpAnimation;
+    Animation<TextureRegion> hurtAnimation;
+    float stateTime;
+    Vector2 playerPos;
+    Vector2 playerVelocity;
+    boolean isJumping;
+    boolean isFacingRight;  // To track which direction the player is facing
+    TextureRegion jumpFrame;
+    // Player spawn position
+
+    public static final int TILE_SIZE = 32;
+    public static final int MAP_WIDTH = 20;
+    public static final int MAP_HEIGHT = 10;
+    public static final int SCREEN_WIDTH = 1280;
+    public static final int SCREEN_HEIGHT = 720;
+
+    Texture moneyTexture;
+    Animation<TextureRegion> moneyAnimation;
+    List<Vector2> moneyPositions;
+    int collectedMoney = 0;
+    int requiredMoney = 10;
+
+
+    public GameScreen(Main game, int levelNumber) {
+        this.game = game;
+        this.levelNumber = levelNumber;
+        background = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\Green_Zone\\2 Background\\Day\\Background.png");
+
+        camera = new OrthographicCamera();
+        viewport = new FitViewport(SCREEN_WIDTH, SCREEN_HEIGHT, camera);
+        camera.position.set(SCREEN_WIDTH / 2f, SCREEN_HEIGHT / 2f, 0);
+        batch = new SpriteBatch();
+        hudBatch = new SpriteBatch();
+
+        loadMap("assets/map.csv");
+
+        hudCoinTexture = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\Green_Zone\\4 Animated objects\\Money.png");
+
+
+        // Load the tileset and split it into tiles
+        tileset = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\Green_Zone\\Tileset.png");
+        numRows = 8;  // Calculate number of rows
+        numCols = 12;   // Calculate number of columns
+        tileRegions = TextureRegion.split(tileset, TILE_SIZE, TILE_SIZE);  // Split tileset into tiles
+
+        Texture moneyTexture = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\Green_Zone\\4 Animated objects\\Money.png");
+        TextureRegion[][] moneyFrames = TextureRegion.split(moneyTexture, moneyTexture.getWidth() / 4, moneyTexture.getHeight());
+        Array<TextureRegion> moneyArray = new Array<>();
+        for (int i = 0; i < 4; i++) {
+            moneyArray.add(moneyFrames[0][i]);
+        }
+        moneyAnimation = new Animation<>(0.1f, moneyArray);
+
+        moneyPositions = new ArrayList<>();
+        for (int row = 0; row < MAP_HEIGHT; row++) {
+            for (int col = 0; col < MAP_WIDTH; col++) {
+                if (map[row][col] == 100) {
+                    moneyPositions.add(new Vector2(col * TILE_SIZE, (MAP_HEIGHT - row - 1) * TILE_SIZE));
+                }
+            }
+        }
+
+        // Slicing walking animation for walking right
+        Texture walkTexture = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\1 Dog\\Walk.png");
+        TextureRegion[][] walkFrames = TextureRegion.split(walkTexture, walkTexture.getWidth() / 6, walkTexture.getHeight());
+
+        Array<TextureRegion> walkRightFrames = new Array<>();
+        for (int i = 0; i < 6; i++) {
+            walkRightFrames.add(walkFrames[0][i]);
+        }
+        walkRightAnimation = new Animation<>(0.1f, walkRightFrames);
+
+        // Create mirrored walking animation for walking left
+        Array<TextureRegion> walkLeftFrames = new Array<>();
+        for (int i = 0; i < 6; i++) {
+            TextureRegion flippedFrame = new TextureRegion(walkFrames[0][i]);
+            flippedFrame.flip(true, false);  // Flip each frame horizontally for walking left
+            walkLeftFrames.add(flippedFrame);
+        }
+        walkLeftAnimation = new Animation<>(0.1f, walkLeftFrames);
+
+        // Idle animation (using only one frame)
+        Texture idleTexture = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\1 Dog\\Idle.png");
+        TextureRegion[][] idleFrames = TextureRegion.split(idleTexture, idleTexture.getWidth() / 4, idleTexture.getHeight());
+
+        Array<TextureRegion> idleFramesArray = new Array<>();
+        for (int i = 0; i < 4; i++) {
+            idleFramesArray.add(idleFrames[0][i]);
+        }
+        idleAnimation = new Animation<>(0.1f, idleFramesArray);
+
+        // Jump animation (single frame for now)
+        // Jump animation (using the 5th frame of the walking animation for the jump)
+        jumpFrame = walkFrames[0][4];  // The 5th frame (index 4) of the walking animation
+        jumpAnimation = new Animation<>(0.1f, jumpFrame);
+
+        // Hurt animation (single frame for now)
+        Texture hurtTexture = new Texture("C:\\Users\\laimi\\Desktop\\VU_PASKAITOS\\Semester_2\\Java\\Java_Game\\assets\\1 Dog\\Hurt.png");
+        TextureRegion[] hurtFrames = new TextureRegion[1];
+        hurtFrames[0] = new TextureRegion(hurtTexture);
+        hurtAnimation = new Animation<>(0.1f, hurtFrames);
+
+        playerPos = new Vector2(300, 100);
+        playerVelocity = new Vector2(0, 0);
+        isJumping = false;
+        isFacingRight = true;
+        stateTime = 0f;
+
+
+    }
+
+
+    @Override
+    public void show() {
+        // Load the background texture
+        background = new Texture("assets/Green_Zone/2 Background/Day/Background.png");
+
+        // Ensure background is loaded
+        if (background != null) {
+            // Set up initial positions for 3 backgrounds to the left of the player and 3 to the right
+            int numberOfBackgrounds = 7; // 3 to the left, 3 to the right + 1 in the middle
+            backgroundPositions = new float[numberOfBackgrounds];
+
+            // Initialize the positions of each background
+            for (int i = 0; i < backgroundPositions.length; i++) {
+                backgroundPositions[i] = i * background.getWidth() - (3 * background.getWidth());  // Place 3 backgrounds to the left of the player
+            }
+        } else {
+            Gdx.app.log("Error", "Background texture is not loaded properly.");
+        }
+    }
+
+
+    private void loadMap(String filePath) {
+        try {
+            BufferedReader reader = new BufferedReader(new FileReader(Gdx.files.internal(filePath).file()));
+            String line;
+            int row = 0;
+            map = new int[MAP_HEIGHT][MAP_WIDTH];
+
+            while ((line = reader.readLine()) != null) {
+                String[] values = line.split(",");
+                for (int col = 0; col < values.length; col++) {
+                    map[row][col] = Integer.parseInt(values[col]);
+                }
+                row++;
+            }
+            reader.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private static final float BACKGROUND_SPEED = 0.5f;  // Set a fixed scroll speed for backgrounds
+    private static final int NUM_BACKGROUND_TILES = 10;  // Number of background tiles on screen
+
+    // Background position list to manage background tiles
+   // private float[] backgroundPositions;
+
+    // Initializes the background tiles
+    private void initBackgrounds() {
+        backgroundPositions = new float[NUM_BACKGROUND_TILES];
+
+        // Start the backgrounds at specific positions
+        for (int i = 0; i < NUM_BACKGROUND_TILES; i++) {
+            backgroundPositions[i] = i * background.getWidth();  // Tile width
+        }
+    }
+
+    // Update background positions based on player movement
+    private void updateBackgrounds(float delta) {
+        float backgroundSpeed = 1.0f;  // Constant scroll speed (can be adjusted)
+        float speedAdjustment = backgroundSpeed * delta;
+
+        // Move the backgrounds to the left
+        for (int i = 0; i < backgroundPositions.length; i++) {
+            backgroundPositions[i] -= speedAdjustment;
+        }
+
+        // Recycle the background tiles when they move off-screen
+        if (backgroundPositions[0] + background.getWidth() < 0) {
+            // Shift the positions of the background tiles
+            for (int i = 0; i < backgroundPositions.length - 1; i++) {
+                backgroundPositions[i] = backgroundPositions[i + 1];
+            }
+            // Place the last tile after the rightmost one
+            backgroundPositions[backgroundPositions.length - 1] = backgroundPositions[backgroundPositions.length - 2] + background.getWidth();
+        }
+    }
+
+
+    @Override
+    public void render(float delta) {
+        if (background == null) {
+            Gdx.app.log("Error", "Background texture is missing. Aborting render.");
+            return;
+        }
+        stateTime += delta;
+// Update background positions and spawn new backgrounds as needed
+        //updateBackgrounds(delta);
+
+        float scale = 3; // Scale factor for tiles and player
+        float SPAWN_THRESHOLD = SCREEN_WIDTH * 0.2f;
+        float BACKGROUND_SPEED_MULTIPLIER = 0.5f;
+        float playerWidth = TILE_SIZE * 0.8f;
+        float playerHeight = TILE_SIZE * 0.9f;
+
+        Gdx.gl.glClearColor(0, 0, 0, 1);
+        Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
+
+        handleInput(delta);
+
+        checkMoneyCollision();
+// Update camera position to follow the player smoothly
+        updateCamera(delta);
+
+        // Update the camera after changing its position
+        camera.update();
+
+        batch.setProjectionMatrix(camera.combined);
+        batch.begin();
+
+// Background logic - Check if the player is near the right or left edge of the screen
+
+        // Check if the player is near the right edge
+        if (playerPos.x + SCREEN_WIDTH / 2f > backgroundPositions[backgroundPositions.length - 1] - background.getWidth()) {
+            // Add a background to the right
+            addBackgroundToRight();
+        }
+
+        // Check if the player is near the left edge
+        if (playerPos.x - SCREEN_WIDTH / 2f < backgroundPositions[0] + background.getWidth()) {
+            // Add a background to the left
+            addBackgroundToLeft();
+        }
+
+        // Draw all the backgrounds
+        for (int i = 0; i < backgroundPositions.length; i++) {
+            batch.draw(background, backgroundPositions[i], 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+        }
+
+/*
+        for (Vector2 moneyPos : moneyPositions) {
+            TextureRegion currentMoneyFrame = moneyAnimation.getKeyFrame(stateTime, true);
+            batch.draw(currentMoneyFrame, moneyPos.x, moneyPos.y, TILE_SIZE, TILE_SIZE);
+        }
+        font.draw(batch, "Money: " + collectedMoney + "/" + requiredMoney, 20, SCREEN_HEIGHT - 20);
+        if (collectedMoney >= requiredMoney) {
+            game.setScreen(new LevelSelectScreen(game));
+        }
+*/
+        // Stretch the background to fit the screen
+        //batch.draw(background, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
+
+
+// Render the map tiles
+        for (int row = 0; row < MAP_HEIGHT; row++) {
+            for (int col = 0; col < MAP_WIDTH; col++) {
+                int tile = map[row][col];
+                if (tile != 0) { // 0 represents an empty tile
+                    // Convert tile index to zero-based index
+                    int tileIndex = tile - 1;
+
+                    // Calculate the row and column in the tileset
+                    int tileRow = tileIndex / numCols; // numCols = 12
+                    int tileCol = tileIndex % numCols;
+
+                    // Get the corresponding TextureRegion
+                    TextureRegion tileRegion = tileRegions[tileRow][tileCol];
+
+                    // Render the tile with scaling
+                    batch.draw(tileRegion, col * TILE_SIZE * scale, (MAP_HEIGHT - row - 1) * TILE_SIZE * scale, TILE_SIZE * scale, TILE_SIZE * scale);
+                }
+            }
+        }
+
+        for (Vector2 moneyPos : moneyPositions) {
+            TextureRegion currentMoneyFrame = moneyAnimation.getKeyFrame(stateTime, true);
+            batch.draw(currentMoneyFrame, moneyPos.x, moneyPos.y, TILE_SIZE, TILE_SIZE);
+        }
+
+
+        // Draw the player animation
+        TextureRegion currentFrame;
+
+        if (isJumping) {
+            currentFrame = jumpAnimation.getKeyFrame(stateTime, true);
+        } else if (playerVelocity.x != 0) {
+            if (playerVelocity.x > 0) {
+                currentFrame = walkRightAnimation.getKeyFrame(stateTime, true);  // Moving right
+            } else {
+                currentFrame = walkLeftAnimation.getKeyFrame(stateTime, true);  // Moving left
+            }
+        } else {
+            currentFrame = idleAnimation.getKeyFrame(stateTime, true);  // Idle animation
+        }
+
+// Render the player with scaling
+        batch.draw(currentFrame, playerPos.x * scale, playerPos.y * scale, playerWidth * scale, playerHeight * scale);
+        batch.end();
+
+        drawHUD();
+    }
+
+    private void drawHUD() {
+        hudBatch.begin();
+        hudBatch.draw(hudCoinTexture, 20, SCREEN_HEIGHT - 50, 32, 32);
+
+        String moneyString = String.valueOf(collectedMoney);
+        int startX = 60;
+        for (char c : moneyString.toCharArray()) {
+            int digit = Character.getNumericValue(c);
+            hudBatch.draw(numberTextures[digit], startX, SCREEN_HEIGHT - 50, 32, 32);
+            startX += 24;
+        }
+
+        hudBatch.end();
+    }
+
+    private void checkMoneyCollision() {
+        Iterator<Vector2> iterator = moneyPositions.iterator();
+        while (iterator.hasNext()) {
+            Vector2 moneyPos = iterator.next();
+            if (playerPos.dst(moneyPos) < TILE_SIZE / 2) {
+                iterator.remove();
+                collectedMoney++;
+            }
+        }
+    }
+
+    private void updateCamera(float delta) {
+        // Smoothing factor for camera movement (lower values make the camera smoother but slower)
+        float smoothingFactor = 5f; // Adjust this value to control smoothness
+
+        // Look-ahead time (how far ahead the camera looks based on player velocity)
+        float lookAheadTime = 0.2f; // Adjust this value to control how far the camera looks ahead
+
+        // Target position for the camera (centered on the player with velocity-based look-ahead)
+        float targetX = playerPos.x * 3 + playerVelocity.x * lookAheadTime; // Scale factor for player position
+
+        // Keep the target Y fixed, no vertical movement
+        float targetY = camera.position.y; // Lock the camera vertically at its current position
+
+        // Calculate the difference between the camera's current position and the target position
+        float deltaX = targetX - camera.position.x;
+
+        // Adjust smoothing based on player speed (only horizontal)
+        float playerSpeed = Math.abs(playerVelocity.x); // Use the player's horizontal speed
+        float dynamicSmoothing = smoothingFactor * (1 + playerSpeed / 100f); // Adjust smoothing based on speed
+
+        // Move the camera horizontally with smoothing
+        camera.position.x += deltaX * dynamicSmoothing * delta; // No vertical movement change (Y-axis locked)
+
+        // The Y position remains fixed and doesn't need clamping
+
+        // Update the camera position
+        camera.update();
+    }
+
+
+    private void addBackgroundToRight() {
+        // Shift all backgrounds to the left
+        for (int i = 0; i < backgroundPositions.length - 1; i++) {
+            backgroundPositions[i] = backgroundPositions[i + 1];
+        }
+
+        // Add a new background to the right
+        backgroundPositions[backgroundPositions.length - 1] = backgroundPositions[backgroundPositions.length - 2] + background.getWidth();
+    }
+
+    private void addBackgroundToLeft() {
+        // Shift all backgrounds to the right
+        for (int i = backgroundPositions.length - 1; i > 0; i--) {
+            backgroundPositions[i] = backgroundPositions[i - 1];
+        }
+
+        // Add a new background to the left
+        backgroundPositions[0] = backgroundPositions[1] - background.getWidth();
+    }
+
+    private void handleInput(float delta) {
+        float moveSpeed = 100 * delta;
+        float gravity = -100;
+
+        // Player dimensions
+        float playerWidth = TILE_SIZE * 0.8f;
+        float playerHeight = TILE_SIZE * 0.9f;
+
+        // Horizontal movement input
+        if (Gdx.input.isKeyPressed(Input.Keys.LEFT)) {
+            playerVelocity.x = -moveSpeed;
+        } else if (Gdx.input.isKeyPressed(Input.Keys.RIGHT)) {
+            playerVelocity.x = moveSpeed;
+        } else {
+            playerVelocity.x = 0;
+        }
+
+        // Jumping input
+        if (Gdx.input.isKeyJustPressed(Input.Keys.SPACE) && !isJumping) {
+            playerVelocity.y = 20;
+            isJumping = true;
+        }
+
+        // Apply gravity
+        playerVelocity.y += gravity * delta;
+
+        // --------- Apply Horizontal Movement ---------
+        playerPos.x += playerVelocity.x;
+        if (checkCollision(playerWidth, playerHeight)) {
+            // Undo horizontal movement if colliding
+            playerPos.x -= playerVelocity.x;
+            playerVelocity.x = 0;
+        }
+
+        // --------- Apply Vertical Movement ---------
+        playerPos.y += playerVelocity.y;
+        if (checkCollision(playerWidth, playerHeight)) {
+            // Undo vertical movement if colliding
+            playerPos.y -= playerVelocity.y;
+
+            // Check if hitting ground or ceiling
+            if (playerVelocity.y < 0) {
+                isJumping = false;  // Landed
+            }
+            playerVelocity.y = 0;
+        }
+
+        // Prevent falling below ground
+        if (playerPos.y < 0) {
+            playerPos.y = 0;
+            playerVelocity.y = 0;
+            isJumping = false;
+        }
+    }
+
+
+    // Checks if player collides with any solid tiles
+    private boolean checkCollision(float playerWidth, float playerHeight) {
+        // Player bounding box
+        float playerLeft = playerPos.x;
+        float playerRight = playerPos.x + playerWidth;
+        float playerBottom = playerPos.y;
+        float playerTop = playerPos.y + playerHeight;
+
+        // Convert to tile coordinates
+        int leftTile = (int) Math.floor(playerLeft / TILE_SIZE);
+        int rightTile = (int) Math.floor(playerRight / TILE_SIZE);
+        int bottomTile = (int) Math.floor(playerBottom / TILE_SIZE);
+        int topTile = (int) Math.floor(playerTop / TILE_SIZE);
+
+
+        // Adjust for map rendering (bottom row is row 0 in the map array)
+        for (int y = bottomTile; y <= topTile; y++) {
+            for (int x = leftTile; x <= rightTile; x++) {
+                // Convert y to map row index
+                int mapRow = MAP_HEIGHT - y - 1;
+                if (isSolidTile(x, mapRow)) {
+                    // Check if it's a diagonal tile and allow climbing
+                    if (isDiagonalTile(x, mapRow)) {
+                        // Allow climbing behavior
+                        if (playerVelocity.y < 0) {
+                            // If falling, stop vertical movement and allow climbing
+                            playerPos.y = y * TILE_SIZE + TILE_SIZE;
+                            playerVelocity.y = 0;
+                            return false;
+                        }
+                    } else {
+                        // Regular collision logic
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean isDiagonalTile(int x, int y) {
+        // Get the tile index and check if it's a diagonal tile
+        int tile = map[y][x];
+        return tile == 42 || tile == 43;
+    }
+
+
+
+    // Safely checks if tile is solid
+    private boolean isSolidTile(int x, int y) {
+        if (x < 0 || x >= map[0].length || y < 0 || y >= map.length) {
+            return false;
+        }
+
+        int tile = map[y][x];
+        return tile == 1 || tile == 22;
+    }
+
+    @Override
+    public void resize(int width, int height) {
+        viewport.update(width, height);
+    }
+
+    @Override
+    public void pause() {}
+
+    @Override
+    public void resume() {}
+
+    @Override
+    public void hide() {}
+
+    @Override
+    public void dispose() {
+        batch.dispose();
+        hudBatch.dispose();
+        tileset.dispose();
+        hudCoinTexture.dispose();
+        background.dispose();
+        if (background != null) {
+            background.dispose();
+        }
+        moneyTexture.dispose();
+    }
+
+
+}
+
+
+
+
+
