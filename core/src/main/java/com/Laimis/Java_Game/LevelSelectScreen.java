@@ -10,13 +10,12 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
-import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.Vector3;
 
 public class LevelSelectScreen implements Screen {
     Main game;
     Texture level1, level2, level3, level4, level5, createLevel, lockedTexture;
-    boolean[] levelUnlocked = {true, false, false, false, false};
+    boolean[] levelUnlocked;
     BitmapFont font;
 
     OrthographicCamera camera;
@@ -50,6 +49,8 @@ public class LevelSelectScreen implements Screen {
 
         shapeRenderer = new ShapeRenderer();  // Initialize ShapeRenderer
 
+        // Initialize level unlocked status
+        levelUnlocked = game.getLevelUnlockedStatus();
     }
 
     @Override
@@ -90,14 +91,14 @@ public class LevelSelectScreen implements Screen {
 
                 // Check if click is inside rectangle for level selection
                 if (touchPos.x >= rectX && touchPos.x <= rectX + rectSize &&
-                        touchPos.y >= rectY && touchPos.y <= rectY + rectSize) {
+                    touchPos.y >= rectY && touchPos.y <= rectY + rectSize) {
 
                     if (i < 5 && levelUnlocked[i]) {
                         System.out.println("Level " + (i + 1) + " selected!");
                         game.setScreen(new GameScreen(game, i + 1)); // Navigate to the selected level
                     } else if (i == 5) {
                         System.out.println("Create Level selected!");
-                        // Navigate to Create Level screen
+                        game.setScreen(new LevelEditorScreen(game)); // Navigate to create level screen
                     } else {
                         System.out.println("Level " + (i + 1) + " is locked!");
                     }
